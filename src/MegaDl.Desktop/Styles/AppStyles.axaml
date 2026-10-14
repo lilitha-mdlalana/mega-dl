@@ -1,0 +1,57 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- App-wide look. Think of this file as the app's CSS: selectors + setters. -->
+
+  <Styles.Resources>
+    <StreamGeometry x:Key="IconPause">M6,4 H10 V20 H6 Z M14,4 H18 V20 H14 Z</StreamGeometry>
+    <StreamGeometry x:Key="IconPlay">M7,4 L19,12 L7,20 Z</StreamGeometry>
+    <StreamGeometry x:Key="IconClose">M6.4,5 L12,10.6 L17.6,5 L19,6.4 L13.4,12 L19,17.6 L17.6,19 L12,13.4 L6.4,19 L5,17.6 L10.6,12 L5,6.4 Z</StreamGeometry>
+    <StreamGeometry x:Key="IconDownload">M11,3 H13 V13.6 L16.3,10.3 L17.7,11.7 L12,17.4 L6.3,11.7 L7.7,10.3 L11,13.6 Z M5,19 H19 V21 H5 Z</StreamGeometry>
+    <SolidColorBrush x:Key="ErrorBrush" Color="#E5484D" />
+    <SolidColorBrush x:Key="SuccessBrush" Color="#30A46C" />
+  </Styles.Resources>
+
+  <Style Selector="Border.toolbar">
+    <Setter Property="Padding" Value="16,14" />
+    <Setter Property="BorderThickness" Value="0,0,0,1" />
+    <Setter Property="BorderBrush" Value="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+  </Style>
+
+  <Style Selector="Border.statusbar">
+    <Setter Property="Padding" Value="16,8" />
+    <Setter Property="BorderThickness" Value="0,1,0,0" />
+    <Setter Property="BorderBrush" Value="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+  </Style>
+
+  <Style Selector="TextBlock.muted">
+    <Setter Property="Opacity" Value="0.7" />
+    <Setter Property="FontSize" Value="12" />
+  </Style>
+
+  <Style Selector="TextBlock.error">
+    <Setter Property="Foreground" Value="{StaticResource ErrorBrush}" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Margin" Value="2,6,0,0" />
+  </Style>
+
+  <Style Selector="Button.icon">
+    <Setter Property="Width" Value="32" />
+    <Setter Property="Height" Value="32" />
+    <Setter Property="Padding" Value="9" />
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+
+  <Style Selector="ProgressBar">
+    <Setter Property="MinHeight" Value="6" />
+  </Style>
+  <Style Selector="ProgressBar.failed">
+    <Setter Property="Foreground" Value="{StaticResource ErrorBrush}" />
+  </Style>
+  <Style Selector="ProgressBar.done">
+    <Setter Property="Foreground" Value="{StaticResource SuccessBrush}" />
+  </Style>
+  <Style Selector="TextBlock.failed">
+    <Setter Property="Foreground" Value="{StaticResource ErrorBrush}" />
+    <Setter Property="Opacity" Value="1" />
+  </Style>
+</Styles>

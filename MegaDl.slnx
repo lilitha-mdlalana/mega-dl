@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MegaDl.Console/MegaDl.Console.csproj" />
+    <Project Path="src/MegaDl.Core/MegaDl.Core.csproj" />
+    <Project Path="src/MegaDl.Desktop/MegaDl.Desktop.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MegaDl.Core.Tests/MegaDl.Core.Tests.csproj" />
+  </Folder>
+</Solution>

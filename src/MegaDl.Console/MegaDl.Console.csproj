@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Headless harness: prove the engine works before any UI touches it. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>megadl</AssemblyName>
+    <RootNamespace>MegaDl.ConsoleApp</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MegaDl.Core\MegaDl.Core.csproj" />
+  </ItemGroup>
+</Project>

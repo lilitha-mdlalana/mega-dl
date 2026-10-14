@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The engine: MEGA protocol, crypto, transfers.
+    Rule: NO UI references in here, ever. If you're tempted to add Avalonia,
+    the code belongs in MegaDl.Desktop instead.
+  -->
+  <PropertyGroup>
+    <RootNamespace>MegaDl.Core</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="MegaDl.Core.Tests" />
+  </ItemGroup>
+</Project>

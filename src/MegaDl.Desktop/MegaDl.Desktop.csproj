@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>MegaDl.Desktop</RootNamespace>
+    <AssemblyName>MegaDl</AssemblyName>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <!-- Compiled bindings: binding typos become build errors instead of silent blank UI. -->
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 11.3.* = newest 11.3 patch at restore time. Pin an exact version once you're happy. -->
+    <PackageReference Include="Avalonia" Version="11.3.*" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.*" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.*" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.*" />
+    <!-- F12 in a debug build opens the Avalonia DevTools (like browser devtools). -->
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.3.*" Condition="'$(Configuration)' == 'Debug'" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MegaDl.Core\MegaDl.Core.csproj" />
+  </ItemGroup>
+</Project>

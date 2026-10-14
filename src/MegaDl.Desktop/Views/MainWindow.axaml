@@ -1,0 +1,105 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:MegaDl.Desktop.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="980" d:DesignHeight="620"
+        x:Class="MegaDl.Desktop.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="MegaDl"
+        Width="980" Height="620" MinWidth="640" MinHeight="400">
+
+  <!-- Gives the IDE previewer live (simulated) data. -->
+  <Design.DataContext>
+    <vm:MainWindowViewModel />
+  </Design.DataContext>
+
+  <DockPanel>
+
+    <!-- ─── Toolbar: paste links ─────────────────────────────────────────── -->
+    <Border DockPanel.Dock="Top" Classes="toolbar">
+      <Grid ColumnDefinitions="*,Auto,Auto,Auto" RowDefinitions="Auto,Auto">
+        <TextBox Text="{Binding LinkText}"
+                 Watermark="Paste one or more MEGA links…" />
+        <!-- IsDefault: pressing Enter anywhere in the window clicks this button. -->
+        <Button Grid.Column="1" Classes="accent" IsDefault="True" Margin="8,0,0,0"
+                Command="{Binding AddLinksCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <PathIcon Data="{DynamicResource IconDownload}" Width="14" Height="14" />
+            <TextBlock Text="Download" />
+          </StackPanel>
+        </Button>
+        <Button Grid.Column="2" Margin="8,0,0,0" Content="Pause all" Command="{Binding PauseAllCommand}" />
+        <Button Grid.Column="3" Margin="8,0,0,0" Content="Resume all" Command="{Binding ResumeAllCommand}" />
+
+        <TextBlock Grid.Row="1" Grid.ColumnSpan="4" Classes="error"
+                   Text="{Binding LinkError}"
+                   IsVisible="{Binding LinkError, Converter={x:Static ObjectConverters.IsNotNull}}" />
+      </Grid>
+    </Border>
+
+    <!-- ─── Status bar ───────────────────────────────────────────────────── -->
+    <Border DockPanel.Dock="Bottom" Classes="statusbar">
+      <Grid ColumnDefinitions="*,Auto,Auto">
+        <TextBlock Text="{Binding StatusText}" Classes="muted" VerticalAlignment="Center" />
+        <TextBlock Grid.Column="1" Text="{Binding TotalSpeedText}" FontWeight="SemiBold"
+                   VerticalAlignment="Center" Margin="0,0,12,0" />
+        <Button Grid.Column="2" Content="Clear completed" Command="{Binding ClearCompletedCommand}" />
+      </Grid>
+    </Border>
+
+    <!-- ─── Main area ────────────────────────────────────────────────────── -->
+    <Panel Margin="8,4,8,0">
+      <!-- ListBox virtualizes: only on-screen rows exist, so 500 items cost the same as 5. -->
+      <ListBox ItemsSource="{Binding Downloads}" Background="Transparent"
+               IsVisible="{Binding !IsEmpty}">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:TransferItemViewModel">
+            <Grid ColumnDefinitions="*,Auto,Auto" RowDefinitions="Auto,Auto,Auto" Margin="4,6">
+
+              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+              <TextBlock Grid.Column="1" Text="{Binding SpeedText}" Classes="muted"
+                         Margin="12,0" VerticalAlignment="Center" />
+
+              <StackPanel Grid.Column="2" Grid.RowSpan="3" Orientation="Horizontal"
+                          VerticalAlignment="Center" Spacing="2" Margin="8,0,0,0">
+                <Button Classes="icon" ToolTip.Tip="Pause"
+                        Command="{Binding PauseCommand}" IsVisible="{Binding CanPause}">
+                  <PathIcon Data="{DynamicResource IconPause}" />
+                </Button>
+                <Button Classes="icon" ToolTip.Tip="Resume / retry"
+                        Command="{Binding ResumeCommand}" IsVisible="{Binding CanResume}">
+                  <PathIcon Data="{DynamicResource IconPlay}" />
+                </Button>
+                <Button Classes="icon" ToolTip.Tip="Remove"
+                        Command="{Binding CancelCommand}">
+                  <PathIcon Data="{DynamicResource IconClose}" />
+                </Button>
+              </StackPanel>
+
+              <ProgressBar Grid.Row="1" Grid.ColumnSpan="2" Margin="0,6"
+                           Minimum="0" Maximum="100" Value="{Binding Percent}"
+                           Classes.failed="{Binding IsFailed}"
+                           Classes.done="{Binding IsCompleted}" />
+
+              <Grid Grid.Row="2" Grid.ColumnSpan="2" ColumnDefinitions="*,Auto">
+                <TextBlock Text="{Binding StatusText}" Classes="muted"
+                           Classes.failed="{Binding IsFailed}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="1" Text="{Binding SizeText}" Classes="muted" Margin="12,0,0,0" />
+              </Grid>
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+
+      <!-- Empty state -->
+      <StackPanel IsVisible="{Binding IsEmpty}" Spacing="10"
+                  HorizontalAlignment="Center" VerticalAlignment="Center">
+        <PathIcon Data="{DynamicResource IconDownload}" Width="40" Height="40" Opacity="0.4" />
+        <TextBlock Text="No downloads yet" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" />
+        <TextBlock Text="Paste a MEGA file or folder link above and press Enter." Classes="muted"
+                   HorizontalAlignment="Center" />
+      </StackPanel>
+    </Panel>
+  </DockPanel>
+</Window>
