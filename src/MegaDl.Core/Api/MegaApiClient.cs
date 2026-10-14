@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -45,13 +46,27 @@ public sealed class MegaApiClient(HttpClient http, string appKey = MegaApiClient
     /// <summary>Sends one command, retrying transient errors with exponential backoff.</summary>
     internal async Task<JsonNode> RequestAsync(JsonObject command, CancellationToken ct, string? extraQuery = null)
     {
+        string? hashcashHeader = null;
+
         for (int attempt = 1; ; attempt++)
         {
             string url = $"{ApiUrl}/cs?id={Interlocked.Increment(ref _seq)}&ak={appKey}{extraQuery}";
-            using var response = await http.PostAsJsonAsync(url, new JsonArray(command.DeepClone()), ct);
+            using var request = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = JsonContent.Create(new JsonArray(command.DeepClone())),
+            };
+            if (hashcashHeader is not null)
+                request.Headers.Add("X-Hashcash", hashcashHeader);
 
-            if (response.StatusCode == HttpStatusCode.PaymentRequired && response.Headers.Contains("X-Hashcash"))
-                throw new MegaApiException(-4, "MEGA asked for a proof-of-work (X-Hashcash). Port HashcashSolver.java (Phase 1 task).");
+            using var response = await http.SendAsync(request, ct);
+
+            if (response.StatusCode == HttpStatusCode.PaymentRequired
+                && response.Headers.TryGetValues("X-Hashcash", out var challenges))
+            {
+                // Solve the proof-of-work and retry the same command with the solution attached.
+                hashcashHeader = HashcashSolver.BuildSolutionHeader(challenges.First());
+                continue;
+            }
 
             string body = await response.Content.ReadAsStringAsync(ct);
             JsonNode? root = JsonNode.Parse(body);

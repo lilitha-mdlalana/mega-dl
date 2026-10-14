@@ -27,12 +27,26 @@ public sealed class FileDownloader(HttpClient http, DownloadOptions? options = n
     /// <summary>Bytes written so far. Read this on a timer — don't push every update to a UI.</summary>
     public long BytesDone => Interlocked.Read(ref _bytesDone);
 
-    public async Task DownloadAsync(RemoteFileInfo file, string destinationPath, CancellationToken ct = default)
+    /// <summary>
+    /// Downloads to "&lt;destinationPath&gt;.part", computing MEGA's meta MAC as chunks
+    /// land (no second full read at the end), then renames to <paramref name="destinationPath"/>
+    /// only once the MAC is verified. Returns false (and leaves the .part file) on mismatch.
+    /// </summary>
+    public async Task<bool> DownloadAsync(RemoteFileInfo file, string destinationPath, CancellationToken ct = default)
     {
         Interlocked.Exchange(ref _bytesDone, 0);
 
-        using var handle = File.OpenHandle(destinationPath, FileMode.Create, FileAccess.ReadWrite,
+        string partPath = destinationPath + ".part";
+        using var handle = File.OpenHandle(partPath, FileMode.Create, FileAccess.ReadWrite,
             FileShare.Read, FileOptions.Asynchronous, preallocationSize: file.Size);
+
+        // MEGA's MAC boundaries (multiplier 1) — the big download chunks below always
+        // align on these (see ChunkLayout), so each download chunk is a whole number of them.
+        var macChunks = ChunkLayout.For(file.Size).ToList();
+        using var mac = new MegaMac(file.Key);
+        var pendingMacs = new SortedDictionary<long, byte[]>();
+        long nextMacId = 1;
+        var macLock = new object();
 
         var parallel = new ParallelOptions { MaxDegreeOfParallelism = _opt.Workers, CancellationToken = ct };
 
@@ -47,15 +61,27 @@ public sealed class FileDownloader(HttpClient http, DownloadOptions? options = n
 
             await RandomAccess.WriteAsync(handle, data, chunk.Offset, token);
             Interlocked.Add(ref _bytesDone, data.Length);
-        });
-    }
 
-    /// <summary>Re-reads the finished file and checks MEGA's meta MAC.</summary>
-    public static async Task<bool> VerifyAsync(string path, FileKey key, CancellationToken ct = default)
-    {
-        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20, useAsync: true);
-        byte[] mac = await MegaMac.ComputeAsync(stream, key, stream.Length, ct);
-        return mac.AsSpan().SequenceEqual(key.MetaMac);
+            foreach (Chunk sub in macChunks.Where(c => c.Offset >= chunk.Offset && c.End <= chunk.End))
+            {
+                byte[] subMac = mac.ComputeChunkMac(data.AsSpan((int)(sub.Offset - chunk.Offset), (int)sub.Size));
+                lock (macLock)
+                {
+                    pendingMacs[sub.Id] = subMac;
+                    while (pendingMacs.TryGetValue(nextMacId, out byte[]? ready))
+                    {
+                        mac.AppendChunkMac(nextMacId, ready);
+                        pendingMacs.Remove(nextMacId);
+                        nextMacId++;
+                    }
+                }
+            }
+        });
+
+        handle.Dispose();
+        bool ok = mac.Finish().AsSpan().SequenceEqual(file.Key.MetaMac);
+        if (ok) File.Move(partPath, destinationPath, overwrite: true);
+        return ok;
     }
 
     private async Task<byte[]> FetchChunkAsync(string fileUrl, Chunk chunk, long totalSize, CancellationToken ct)

@@ -39,22 +39,41 @@ string dir = args.Length > 2 ? args[2] : Directory.GetCurrentDirectory();
 string path = Path.Combine(dir, file.Name);
 var downloader = new FileDownloader(http);
 
-// The download runs on the thread pool; this loop just *samples* progress twice a
-// second. Same throttling pattern the desktop UI uses.
-var sw = Stopwatch.StartNew();
-Task download = downloader.DownloadAsync(file, path, cts.Token);
-while (!download.IsCompleted)
+try
 {
-    await Task.WhenAny(download, Task.Delay(500));
-    long done = downloader.BytesDone;
-    double speed = done / Math.Max(sw.Elapsed.TotalSeconds, 0.001);
-    Console.Write($"\r{done * 100.0 / Math.Max(file.Size, 1),6:0.0}%  {Format(done)} / {Format(file.Size)}  {Format((long)speed)}/s   ");
-}
-await download; // rethrows if it failed
-Console.WriteLine($"\nSaved to {path}\nVerifying integrity (MEGA meta MAC)...");
+    // The download runs on the thread pool; this loop just *samples* progress twice a
+    // second. Same throttling pattern the desktop UI uses. The MAC is folded in as
+    // chunks land, so there's no separate verify pass after this completes.
+    var sw = Stopwatch.StartNew();
+    Task<bool> download = downloader.DownloadAsync(file, path, cts.Token);
+    while (!download.IsCompleted)
+    {
+        await Task.WhenAny(download, Task.Delay(500));
+        long done = downloader.BytesDone;
+        double speed = done / Math.Max(sw.Elapsed.TotalSeconds, 0.001);
+        Console.Write($"\r{done * 100.0 / Math.Max(file.Size, 1),6:0.0}%  {Format(done)} / {Format(file.Size)}  {Format((long)speed)}/s   ");
+    }
+    bool ok = await download; // rethrows if it failed
 
-bool ok = await FileDownloader.VerifyAsync(path, file.Key, cts.Token);
-Console.WriteLine(ok ? "OK: file is intact." : "MISMATCH: file is corrupt or the key is wrong.");
-return ok ? 0 : 2;
+    Console.WriteLine(ok
+        ? $"\nSaved to {path}\nOK: integrity check (MEGA meta MAC) passed."
+        : $"\nMISMATCH: downloaded data doesn't match MEGA's meta MAC. Left as {path}.part for inspection.");
+    return ok ? 0 : 2;
+}
+catch (Exception ex) when (Flatten(ex) is TransferQuotaExceededException)
+{
+    Console.WriteLine("\nQuota exceeded: this IP has used up MEGA's free transfer quota (HTTP 509). " +
+                       "Wait, use a different network, or (Phase 4) enable the smart proxy.");
+    return 3;
+}
+catch (Exception ex) when (Flatten(ex) is MegaApiException)
+{
+    Console.WriteLine($"\nMEGA API error: {Flatten(ex).Message}");
+    return 4;
+}
+
+// Parallel.ForEachAsync wraps a single worker failure as-is but wraps 2+ concurrent
+// failures in an AggregateException; this unwraps either case to the first real cause.
+static Exception Flatten(Exception ex) => ex is AggregateException { InnerExceptions: [var first, ..] } ? first : ex;
 
 static string Format(long bytes) => ByteSize.Format(bytes);
