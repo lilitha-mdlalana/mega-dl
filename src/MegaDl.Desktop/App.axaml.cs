@@ -1,7 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
-using MegaDl.Desktop.Services;
+using MegaDl.Core.Transfers;
 using MegaDl.Desktop.ViewModels;
 using MegaDl.Desktop.Views;
 
@@ -16,10 +16,11 @@ public partial class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             // Composition root: the one place that decides which engine the app uses.
-            // Phase 3 swaps SimulatedTransferEngine for the real TransferManager here.
-            var engine = new SimulatedTransferEngine();
+            var http = new HttpClient { Timeout = TimeSpan.FromMinutes(2) };
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("MegaDl/0.1");
+            var engine = new TransferManager(http);
             desktop.MainWindow = new MainWindow { DataContext = new MainWindowViewModel(engine) };
-            desktop.ShutdownRequested += (_, _) => engine.Dispose();
+            desktop.ShutdownRequested += (_, _) => { engine.Dispose(); http.Dispose(); };
         }
 
         base.OnFrameworkInitializationCompleted();

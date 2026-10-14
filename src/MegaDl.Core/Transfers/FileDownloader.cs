@@ -84,7 +84,8 @@ public sealed class FileDownloader(HttpClient http, DownloadOptions? options = n
         return ok;
     }
 
-    private async Task<byte[]> FetchChunkAsync(string fileUrl, Chunk chunk, long totalSize, CancellationToken ct)
+    /// <summary>Fetches and range-checks one encrypted chunk. Retries transient failures; honours 509 immediately.</summary>
+    public async Task<byte[]> FetchChunkAsync(string fileUrl, Chunk chunk, long totalSize, CancellationToken ct)
     {
         // Same URL shape as ChunkWriterManager.genChunkUrl: open-ended range for the last chunk.
         string url = $"{fileUrl}/{chunk.Offset}" + (chunk.End == totalSize ? "" : $"-{chunk.End - 1}");
