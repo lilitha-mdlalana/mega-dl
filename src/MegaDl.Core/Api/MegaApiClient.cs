@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using MegaDl.Core.Crypto;
@@ -29,7 +30,7 @@ public sealed class MegaApiClient(HttpClient http, string appKey = MegaApiClient
     public async Task<RemoteFileInfo> GetFileInfoAsync(MegaLink link, CancellationToken ct = default)
     {
         if (link.Kind != MegaLinkKind.File)
-            throw new NotSupportedException("Folder links arrive in Phase 2 (folder listing + node keys).");
+            throw new NotSupportedException("Use GetFolderAsync for folder (or file-in-folder) links.");
 
         var key = FileKey.FromBase64Url(link.Key);
         var command = new JsonObject { ["a"] = "g", ["g"] = 1, ["p"] = link.Id };
@@ -41,6 +42,86 @@ public sealed class MegaApiClient(HttpClient http, string appKey = MegaApiClient
                       ?? throw new MegaApiException(-14);
 
         return new RemoteFileInfo(name, size, url, key);
+    }
+
+    /// <summary>
+    /// Lists every node (file and folder) under a public folder link. Node keys arrive
+    /// wrapped with the folder's share key (<see cref="NodeKey.Unwrap"/>) — no per-parent
+    /// chaining, every node unwraps directly with the link's key. A node whose "k" field
+    /// doesn't decrypt with this key (a foreign nested share) is silently skipped.
+    /// </summary>
+    public async Task<IReadOnlyList<FolderNode>> GetFolderAsync(MegaLink link, CancellationToken ct = default)
+    {
+        if (link.Kind is not (MegaLinkKind.Folder or MegaLinkKind.FileInFolder))
+            throw new NotSupportedException("GetFolderAsync is for folder (or file-in-folder) links.");
+
+        byte[] folderKey = Base64Url.Decode(link.Key);
+        var command = new JsonObject { ["a"] = "f", ["c"] = 1, ["r"] = 1, ["ca"] = 1 };
+        JsonNode result = await RequestAsync(command, ct, extraQuery: $"&n={link.Id}");
+
+        var nodes = new List<FolderNode>();
+        foreach (JsonNode? entry in result["f"]?.AsArray() ?? [])
+        {
+            if (entry is null) continue;
+
+            string? fullKey = entry["k"]?.GetValue<string>();
+            string? attr = entry["a"]?.GetValue<string>();
+            if (string.IsNullOrEmpty(fullKey) || string.IsNullOrEmpty(attr)) continue;
+
+            (byte[] nodeKey, string name)? resolved = ResolveNodeKey(fullKey, attr, folderKey);
+            if (resolved is null) continue;
+
+            string handle = entry["h"]!.GetValue<string>();
+            string? parent = entry["p"]?.GetValue<string>();
+            int type = entry["t"]!.GetValue<int>();
+            long size = entry["s"]?.GetValue<long>() ?? 0;
+
+            nodes.Add(new FolderNode(handle, parent, IsFolder: type != 0, resolved.Value.name, size, resolved.Value.nodeKey));
+        }
+        return nodes;
+    }
+
+    /// <summary>Resolves a download URL for one file node inside a folder (the "n" + "&amp;n=" shape).</summary>
+    public async Task<RemoteFileInfo> GetFileInFolderAsync(string folderId, FolderNode file, CancellationToken ct = default)
+    {
+        if (file.IsFolder) throw new ArgumentException("Not a file node.", nameof(file));
+        if (file.NodeKey.Length != 32) throw new MegaApiException(-14, "File node key must be 32 bytes.");
+
+        var command = new JsonObject { ["a"] = "g", ["g"] = 1, ["n"] = file.Handle };
+        JsonNode result = await RequestAsync(command, ct, extraQuery: $"&n={folderId}");
+
+        long size = result["s"]?.GetValue<long>() ?? file.Size;
+        string url = result["g"]?.GetValue<string>() is { Length: > 0 } g ? g : throw new MegaApiException(-101);
+
+        return new RemoteFileInfo(file.Name, size, url, FileKey.FromBytes(file.NodeKey));
+    }
+
+    /// <summary>
+    /// MEGA may send several ':'/'/'-separated key candidates per node (nested shares);
+    /// try each until one both AES-ECB-unwraps and decrypts a readable "n" (name) attribute.
+    /// </summary>
+    private static (byte[] nodeKey, string name)? ResolveNodeKey(string fullKey, string attr, byte[] folderKey)
+    {
+        foreach (string segment in fullKey.Split('/'))
+        {
+            string[] parts = segment.Split(':');
+            if (parts.Length < 2) continue;
+
+            try
+            {
+                byte[] wrapped = Base64Url.Decode(parts[^1]);
+                byte[] nodeKey = NodeKey.Unwrap(wrapped, folderKey);
+                byte[] attrKey = nodeKey.Length == 32 ? FileKey.FromBytes(nodeKey).AesKey : nodeKey;
+
+                if (NodeAttributes.TryDecryptName(attr, attrKey) is { } name)
+                    return (nodeKey, name);
+            }
+            catch (Exception ex) when (ex is FormatException or CryptographicException)
+            {
+                // Not the right segment/key for this node — try the next candidate.
+            }
+        }
+        return null;
     }
 
     /// <summary>Sends one command, retrying transient errors with exponential backoff.</summary>
