@@ -12,12 +12,11 @@ public sealed record FolderNode(
 public static class FolderNodeExtensions
 {
     /// <summary>
-    /// "&lt;folder name&gt;/&lt;subfolder path&gt;/&lt;node name&gt;" — walks the parent
-    /// chain a folder listing gives back up to that folder's root. Shared by the console
-    /// and the engine so a file downloaded from inside a folder always lands in the same
-    /// place either way.
+    /// ["&lt;folder name&gt;", "&lt;subfolder&gt;", ..., "&lt;node name&gt;"] — walks the
+    /// parent chain a folder listing gives back up to that folder's root (index 0: the
+    /// share's root folder; last index: this node's own name).
     /// </summary>
-    public static string BuildRelativePath(this FolderNode node, IReadOnlyDictionary<string, FolderNode> byHandle)
+    public static List<string> PathParts(this FolderNode node, IReadOnlyDictionary<string, FolderNode> byHandle)
     {
         var parts = new List<string> { node.Name };
         string? parentHandle = node.ParentHandle;
@@ -26,6 +25,14 @@ public static class FolderNodeExtensions
             parts.Insert(0, parent.Name);
             parentHandle = parent.ParentHandle;
         }
-        return Path.Combine(parts.ToArray());
+        return parts;
     }
+
+    /// <summary>
+    /// "&lt;folder name&gt;/&lt;subfolder path&gt;/&lt;node name&gt;" — shared by the console
+    /// and the engine so a file downloaded from inside a folder always lands in the same
+    /// place either way.
+    /// </summary>
+    public static string BuildRelativePath(this FolderNode node, IReadOnlyDictionary<string, FolderNode> byHandle) =>
+        Path.Combine(node.PathParts(byHandle).ToArray());
 }

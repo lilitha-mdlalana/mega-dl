@@ -16,6 +16,7 @@ public partial class TransferItemViewModel(Guid id, ITransferEngine engine) : Ob
     public Guid Id { get; } = id;
 
     [ObservableProperty] private string _name = "";
+    [ObservableProperty] private string _relativePath = ""; // subfolder path, shown as grey text (Phase 2c)
     [ObservableProperty] private double _percent;
     [ObservableProperty] private string _sizeText = "";
     [ObservableProperty] private string _speedText = "";
@@ -25,13 +26,19 @@ public partial class TransferItemViewModel(Guid id, ITransferEngine engine) : Ob
     [ObservableProperty] private bool _canResume;
     [ObservableProperty] private bool _isFailed;
     [ObservableProperty] private bool _isCompleted;
+    [ObservableProperty] private bool _isVisibleInList = true; // set by the owning group's "Show completed" toggle
 
     internal double BytesPerSecond { get; private set; }
+    internal long SizeBytes { get; private set; }
+    internal long BytesDone { get; private set; }
 
     internal void Apply(TransferSnapshot s)
     {
         // Setting a property to the same value is a no-op (no redraw), so this is cheap.
         Name = s.Name;
+        RelativePath = s.RelativePath ?? "";
+        SizeBytes = s.Size;
+        BytesDone = s.BytesDone;
         Percent = s.Size == 0 ? 0 : s.BytesDone * 100.0 / s.Size;
         SizeText = $"{ByteSize.Format(s.BytesDone)} of {ByteSize.Format(s.Size)}";
         SpeedText = s.State == TransferState.Running ? $"{ByteSize.Format(s.BytesPerSecond)}/s" : "";

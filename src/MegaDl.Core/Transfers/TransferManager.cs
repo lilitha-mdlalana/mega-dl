@@ -35,6 +35,9 @@ public sealed class TransferManager : ITransferEngine, IDisposable
         public bool CancelRequested;
         public RemoteFileInfo? Info;
         public string? DestinationPath;
+        public string? GroupId;
+        public string? GroupName;
+        public string? RelativePath;
         public ResumableDownload? Download;
         public CancellationTokenSource LifecycleCts = new();
 
@@ -66,6 +69,9 @@ public sealed class TransferManager : ITransferEngine, IDisposable
     public Guid Enqueue(MegaLink link, string destinationDirectory)
     {
         var job = new Job { Id = Guid.NewGuid(), Link = link, DestinationDir = destinationDirectory, Name = link.Id };
+        // Set the group up front (we already know the folder's id) so the row never
+        // briefly shows under "Single files" before jumping to its real group.
+        if (link.Kind == MegaLinkKind.FileInFolder) { job.GroupId = link.Id; job.GroupName = "Folder"; }
         lock (_lock) _jobs.Add(job);
         _ = RunLifecycleAsync(job);
         return job.Id;
@@ -121,7 +127,9 @@ public sealed class TransferManager : ITransferEngine, IDisposable
     public IReadOnlyList<TransferSnapshot> Snapshot()
     {
         lock (_lock)
-            return _jobs.Select(j => new TransferSnapshot(j.Id, j.Name, j.Size, j.BytesDone, j.BytesPerSecond, j.State, j.Error)).ToList();
+            return _jobs.Select(j => new TransferSnapshot(
+                j.Id, j.Name, j.Size, j.BytesDone, j.BytesPerSecond, j.State, j.Error,
+                j.GroupId, j.GroupName, j.RelativePath)).ToList();
     }
 
     private Job? Find(Guid id)
@@ -151,7 +159,10 @@ public sealed class TransferManager : ITransferEngine, IDisposable
                 }
                 else if (job.Link.Kind == MegaLinkKind.FileInFolder)
                 {
-                    (info, destinationPath) = await ResolveFileInFolderAsync(job.Link, job.DestinationDir, token).ConfigureAwait(false);
+                    FileInFolderResolution r = await ResolveFileInFolderAsync(job.Link, job.DestinationDir, token).ConfigureAwait(false);
+                    info = r.Info;
+                    destinationPath = r.DestinationPath;
+                    lock (_lock) { job.GroupId = job.Link.Id; job.GroupName = r.GroupName; job.RelativePath = r.RelativePath; }
                 }
                 else
                 {
@@ -208,8 +219,9 @@ public sealed class TransferManager : ITransferEngine, IDisposable
         }
     }
 
-    private async Task<(RemoteFileInfo Info, string DestinationPath)> ResolveFileInFolderAsync(
-        MegaLink link, string destinationDir, CancellationToken ct)
+    private sealed record FileInFolderResolution(RemoteFileInfo Info, string DestinationPath, string GroupName, string? RelativePath);
+
+    private async Task<FileInFolderResolution> ResolveFileInFolderAsync(MegaLink link, string destinationDir, CancellationToken ct)
     {
         IReadOnlyList<FolderNode> nodes = await GetFolderNodesCachedAsync(link, ct).ConfigureAwait(false);
         var byHandle = nodes.ToDictionary(n => n.Handle);
@@ -219,9 +231,17 @@ public sealed class TransferManager : ITransferEngine, IDisposable
             : throw new MegaApiException(-9, $"File {link.ChildId} not found in this folder.");
 
         RemoteFileInfo info = await _api.GetFileInFolderAsync(link.Id, node, ct).ConfigureAwait(false);
-        string destinationPath = Path.Combine(destinationDir, node.BuildRelativePath(byHandle));
+
+        // parts[0] is the share's root folder name (the "group"); the rest, minus this
+        // file's own name at the end, is the subfolder path shown as grey text on the row.
+        List<string> parts = node.PathParts(byHandle);
+        string groupName = parts[0];
+        string? relativePath = parts.Count > 2 ? Path.Combine(parts.Skip(1).Take(parts.Count - 2).ToArray()) : null;
+
+        string destinationPath = Path.Combine(destinationDir, Path.Combine(parts.ToArray()));
         Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
-        return (info, destinationPath);
+
+        return new FileInFolderResolution(info, destinationPath, groupName, relativePath);
     }
 
     private Task<IReadOnlyList<FolderNode>> GetFolderNodesCachedAsync(MegaLink link, CancellationToken ct) =>

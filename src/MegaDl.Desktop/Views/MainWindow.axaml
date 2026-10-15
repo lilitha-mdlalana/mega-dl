@@ -48,49 +48,92 @@
       </Grid>
     </Border>
 
-    <!-- ─── Main area ────────────────────────────────────────────────────── -->
+    <!-- ─── Main area: one collapsible section per folder link, plus "Single files" ──── -->
     <Panel Margin="8,4,8,0">
-      <!-- ListBox virtualizes: only on-screen rows exist, so 500 items cost the same as 5. -->
-      <ListBox ItemsSource="{Binding Downloads}" Background="Transparent"
-               IsVisible="{Binding !IsEmpty}">
-        <ListBox.ItemTemplate>
-          <DataTemplate x:DataType="vm:TransferItemViewModel">
-            <Grid ColumnDefinitions="*,Auto,Auto" RowDefinitions="Auto,Auto,Auto" Margin="4,6">
+      <ScrollViewer IsVisible="{Binding !IsEmpty}">
+        <ItemsControl ItemsSource="{Binding Groups}" HorizontalAlignment="Stretch">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:DownloadGroupViewModel">
+              <Expander IsExpanded="{Binding IsExpanded}" Margin="0,4"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <Expander.Header>
+                  <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" VerticalAlignment="Center"
+                        HorizontalAlignment="Stretch">
+                    <StackPanel Spacing="2">
+                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Text="{Binding SummaryText}" Classes="muted" FontSize="11" />
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" Content="Show completed" IsChecked="{Binding ShowCompleted}"
+                              Margin="12,0" FontSize="11" />
+                    <Button Grid.Column="2" Classes="icon" ToolTip.Tip="Pause all in this group"
+                            Command="{Binding PauseGroupCommand}">
+                      <PathIcon Data="{DynamicResource IconPause}" />
+                    </Button>
+                    <Button Grid.Column="3" Classes="icon" ToolTip.Tip="Resume all in this group"
+                            Command="{Binding ResumeGroupCommand}">
+                      <PathIcon Data="{DynamicResource IconPlay}" />
+                    </Button>
+                    <Button Grid.Column="4" Classes="icon" ToolTip.Tip="Remove all in this group"
+                            Command="{Binding CancelGroupCommand}">
+                      <PathIcon Data="{DynamicResource IconClose}" />
+                    </Button>
+                  </Grid>
+                </Expander.Header>
 
-              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-              <TextBlock Grid.Column="1" Text="{Binding SpeedText}" Classes="muted"
-                         Margin="12,0" VerticalAlignment="Center" />
+                <StackPanel>
+                  <ProgressBar Minimum="0" Maximum="100" Value="{Binding OverallPercent}" Margin="0,2,0,6"
+                               IsVisible="{Binding !IsSingleFiles}" />
 
-              <StackPanel Grid.Column="2" Grid.RowSpan="3" Orientation="Horizontal"
-                          VerticalAlignment="Center" Spacing="2" Margin="8,0,0,0">
-                <Button Classes="icon" ToolTip.Tip="Pause"
-                        Command="{Binding PauseCommand}" IsVisible="{Binding CanPause}">
-                  <PathIcon Data="{DynamicResource IconPause}" />
-                </Button>
-                <Button Classes="icon" ToolTip.Tip="Resume / retry"
-                        Command="{Binding ResumeCommand}" IsVisible="{Binding CanResume}">
-                  <PathIcon Data="{DynamicResource IconPlay}" />
-                </Button>
-                <Button Classes="icon" ToolTip.Tip="Remove"
-                        Command="{Binding CancelCommand}">
-                  <PathIcon Data="{DynamicResource IconClose}" />
-                </Button>
-              </StackPanel>
+                  <ItemsControl ItemsSource="{Binding Rows}" HorizontalAlignment="Stretch">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:TransferItemViewModel">
+                        <Grid ColumnDefinitions="*,Auto,Auto" RowDefinitions="Auto,Auto,Auto" Margin="4,6"
+                              IsVisible="{Binding IsVisibleInList}">
 
-              <ProgressBar Grid.Row="1" Grid.ColumnSpan="2" Margin="0,6"
-                           Minimum="0" Maximum="100" Value="{Binding Percent}"
-                           Classes.failed="{Binding IsFailed}"
-                           Classes.done="{Binding IsCompleted}" />
+                          <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding RelativePath}" Classes="muted"
+                                       IsVisible="{Binding RelativePath, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                          </StackPanel>
+                          <TextBlock Grid.Column="1" Text="{Binding SpeedText}" Classes="muted"
+                                     Margin="12,0" VerticalAlignment="Center" />
 
-              <Grid Grid.Row="2" Grid.ColumnSpan="2" ColumnDefinitions="*,Auto">
-                <TextBlock Text="{Binding StatusText}" Classes="muted"
-                           Classes.failed="{Binding IsFailed}" TextTrimming="CharacterEllipsis" />
-                <TextBlock Grid.Column="1" Text="{Binding SizeText}" Classes="muted" Margin="12,0,0,0" />
-              </Grid>
-            </Grid>
-          </DataTemplate>
-        </ListBox.ItemTemplate>
-      </ListBox>
+                          <StackPanel Grid.Column="2" Grid.RowSpan="3" Orientation="Horizontal"
+                                      VerticalAlignment="Center" Spacing="2" Margin="8,0,0,0">
+                            <Button Classes="icon" ToolTip.Tip="Pause"
+                                    Command="{Binding PauseCommand}" IsVisible="{Binding CanPause}">
+                              <PathIcon Data="{DynamicResource IconPause}" />
+                            </Button>
+                            <Button Classes="icon" ToolTip.Tip="Resume / retry"
+                                    Command="{Binding ResumeCommand}" IsVisible="{Binding CanResume}">
+                              <PathIcon Data="{DynamicResource IconPlay}" />
+                            </Button>
+                            <Button Classes="icon" ToolTip.Tip="Remove"
+                                    Command="{Binding CancelCommand}">
+                              <PathIcon Data="{DynamicResource IconClose}" />
+                            </Button>
+                          </StackPanel>
+
+                          <ProgressBar Grid.Row="1" Grid.ColumnSpan="2" Margin="0,6"
+                                       Minimum="0" Maximum="100" Value="{Binding Percent}"
+                                       Classes.failed="{Binding IsFailed}"
+                                       Classes.done="{Binding IsCompleted}" />
+
+                          <Grid Grid.Row="2" Grid.ColumnSpan="2" ColumnDefinitions="*,Auto">
+                            <TextBlock Text="{Binding StatusText}" Classes="muted"
+                                       Classes.failed="{Binding IsFailed}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="1" Text="{Binding SizeText}" Classes="muted" Margin="12,0,0,0" />
+                          </Grid>
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </Expander>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
 
       <!-- Empty state -->
       <StackPanel IsVisible="{Binding IsEmpty}" Spacing="10"

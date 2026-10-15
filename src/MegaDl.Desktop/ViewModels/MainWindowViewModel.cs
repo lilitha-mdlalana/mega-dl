@@ -28,10 +28,13 @@ public partial class MainWindowViewModel : ViewModelBase
 {
     private readonly ITransferEngine _engine;
     private readonly Dictionary<Guid, TransferItemViewModel> _byId = [];
+    private readonly Dictionary<Guid, string> _groupKeyById = [];
+    private readonly Dictionary<string, DownloadGroupViewModel> _groupsByKey = [];
     private readonly string _downloadDir =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
 
-    public ObservableCollection<TransferItemViewModel> Downloads { get; } = [];
+    /// <summary>One collapsible section per folder link, plus a shared "Single files" one (Phase 2c).</summary>
+    public ObservableCollection<DownloadGroupViewModel> Groups { get; } = [];
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(AddLinksCommand))]
@@ -91,49 +94,84 @@ public partial class MainWindowViewModel : ViewModelBase
     };
 
     [RelayCommand]
-    private void PauseAll() { foreach (var d in Downloads) _engine.Pause(d.Id); }
+    private void PauseAll() { foreach (var d in _byId.Values) _engine.Pause(d.Id); }
 
     [RelayCommand]
-    private void ResumeAll() { foreach (var d in Downloads) _engine.Resume(d.Id); }
+    private void ResumeAll() { foreach (var d in _byId.Values) _engine.Resume(d.Id); }
 
     [RelayCommand]
     private void ClearCompleted()
     {
-        foreach (var d in Downloads.Where(d => d.State == TransferState.Completed).ToList())
+        foreach (var d in _byId.Values.Where(d => d.State == TransferState.Completed).ToList())
             _engine.Cancel(d.Id);
         Sync();
     }
 
-    /// <summary>Reconciles the list with the engine's latest snapshot (like a React diff, by key).</summary>
+    /// <summary>Reconciles the group list and each group's rows with the engine's latest
+    /// snapshot (like a React diff, by key) — the same pattern as before 2c, one level higher.</summary>
     private void Sync()
     {
         IReadOnlyList<TransferSnapshot> snapshot = _engine.Snapshot();
-        var alive = new HashSet<Guid>();
+        var aliveItems = new HashSet<Guid>();
+        var aliveGroups = new HashSet<string>();
 
         foreach (var s in snapshot)
         {
-            alive.Add(s.Id);
+            string groupKey = s.GroupId ?? DownloadGroupViewModel.SingleFilesKey;
+            aliveGroups.Add(groupKey);
+            if (!_groupsByKey.TryGetValue(groupKey, out var group))
+            {
+                string groupName = groupKey == DownloadGroupViewModel.SingleFilesKey ? "Single files" : s.GroupName ?? "Folder";
+                group = new DownloadGroupViewModel(groupKey, groupName);
+                _groupsByKey[groupKey] = group;
+                Groups.Add(group);
+            }
+            else if (!group.IsSingleFiles && s.GroupName is { } realName && group.Name != realName)
+            {
+                group.Name = realName; // placeholder "Folder" -> the real folder name, once resolved
+            }
+
+            aliveItems.Add(s.Id);
             if (!_byId.TryGetValue(s.Id, out var vm))
             {
                 vm = new TransferItemViewModel(s.Id, _engine);
                 _byId[s.Id] = vm;
-                Downloads.Add(vm);
+                _groupKeyById[s.Id] = groupKey;
+                group.Rows.Add(vm);
+            }
+            else if (_groupKeyById[s.Id] != groupKey)
+            {
+                // A file-in-folder job starts out with no GroupId (shown under "Single
+                // files") until its folder listing resolves — move it once that lands,
+                // instead of leaving a now-empty group behind.
+                if (_groupsByKey.TryGetValue(_groupKeyById[s.Id], out var oldGroup)) oldGroup.Rows.Remove(vm);
+                group.Rows.Add(vm);
+                _groupKeyById[s.Id] = groupKey;
             }
             vm.Apply(s);
         }
 
-        foreach (var gone in _byId.Keys.Where(id => !alive.Contains(id)).ToList())
+        foreach (var gone in _byId.Keys.Where(id => !aliveItems.Contains(id)).ToList())
         {
-            Downloads.Remove(_byId[gone]);
+            if (_groupsByKey.TryGetValue(_groupKeyById[gone], out var group)) group.Rows.Remove(_byId[gone]);
             _byId.Remove(gone);
+            _groupKeyById.Remove(gone);
         }
+
+        foreach (var goneGroup in _groupsByKey.Keys.Where(k => !aliveGroups.Contains(k)).ToList())
+        {
+            Groups.Remove(_groupsByKey[goneGroup]);
+            _groupsByKey.Remove(goneGroup);
+        }
+
+        foreach (var group in Groups) group.Recompute();
 
         int running = snapshot.Count(s => s.State == TransferState.Running);
         int queued = snapshot.Count(s => s.State is TransferState.Queued or TransferState.Starting);
         int done = snapshot.Count(s => s.State == TransferState.Completed);
         double speed = snapshot.Sum(s => s.BytesPerSecond);
 
-        IsEmpty = Downloads.Count == 0;
+        IsEmpty = Groups.Count == 0;
         TotalSpeedText = speed > 0 ? $"↓ {ByteSize.Format(speed)}/s" : "";
         StatusText = IsEmpty
             ? "Paste a MEGA link to start."
