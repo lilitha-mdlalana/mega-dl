@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using MegaDl.Core.Api;
 using MegaDl.Core.Links;
 
@@ -33,6 +34,7 @@ public sealed class TransferManager : ITransferEngine, IDisposable
         public string? Error;
         public bool CancelRequested;
         public RemoteFileInfo? Info;
+        public string? DestinationPath;
         public ResumableDownload? Download;
         public CancellationTokenSource LifecycleCts = new();
 
@@ -47,6 +49,10 @@ public sealed class TransferManager : ITransferEngine, IDisposable
     private readonly Lock _lock = new();
     private readonly CancellationTokenSource _shutdown = new();
     private readonly Task _speedLoop;
+
+    // One "f" listing fetch per distinct folder link, shared by every file-in-folder
+    // job queued from it (the picker typically queues many at once).
+    private readonly ConcurrentDictionary<string, Task<IReadOnlyList<FolderNode>>> _folderCache = new();
 
     public TransferManager(HttpClient http, int maxConcurrent = DefaultMaxConcurrent, DownloadOptions? downloadOptions = null)
     {
@@ -135,11 +141,27 @@ public sealed class TransferManager : ITransferEngine, IDisposable
 
             if (job.Info is null)
             {
-                RemoteFileInfo info = await _api.GetFileInfoAsync(job.Link, token).ConfigureAwait(false);
-                lock (_lock) { job.Info = info; job.Name = info.Name; job.Size = info.Size; }
+                RemoteFileInfo info;
+                string destinationPath;
+
+                if (job.Link.Kind == MegaLinkKind.File)
+                {
+                    info = await _api.GetFileInfoAsync(job.Link, token).ConfigureAwait(false);
+                    destinationPath = Path.Combine(job.DestinationDir, info.Name);
+                }
+                else if (job.Link.Kind == MegaLinkKind.FileInFolder)
+                {
+                    (info, destinationPath) = await ResolveFileInFolderAsync(job.Link, job.DestinationDir, token).ConfigureAwait(false);
+                }
+                else
+                {
+                    throw new NotSupportedException("Folder links need the folder picker to choose which files to download.");
+                }
+
+                lock (_lock) { job.Info = info; job.DestinationPath = destinationPath; job.Name = info.Name; job.Size = info.Size; }
             }
 
-            job.Download ??= new ResumableDownload(_http, job.Info!, Path.Combine(job.DestinationDir, job.Info!.Name), _downloadOptions);
+            job.Download ??= new ResumableDownload(_http, job.Info!, job.DestinationPath!, _downloadOptions);
             lock (_lock) job.State = TransferState.Running;
 
             bool ok = await job.Download.RunAsync(token).ConfigureAwait(false);
@@ -185,6 +207,25 @@ public sealed class TransferManager : ITransferEngine, IDisposable
             if (acquired) _concurrency.Release();
         }
     }
+
+    private async Task<(RemoteFileInfo Info, string DestinationPath)> ResolveFileInFolderAsync(
+        MegaLink link, string destinationDir, CancellationToken ct)
+    {
+        IReadOnlyList<FolderNode> nodes = await GetFolderNodesCachedAsync(link, ct).ConfigureAwait(false);
+        var byHandle = nodes.ToDictionary(n => n.Handle);
+
+        FolderNode node = byHandle.TryGetValue(link.ChildId!, out FolderNode? n)
+            ? n
+            : throw new MegaApiException(-9, $"File {link.ChildId} not found in this folder.");
+
+        RemoteFileInfo info = await _api.GetFileInFolderAsync(link.Id, node, ct).ConfigureAwait(false);
+        string destinationPath = Path.Combine(destinationDir, node.BuildRelativePath(byHandle));
+        Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+        return (info, destinationPath);
+    }
+
+    private Task<IReadOnlyList<FolderNode>> GetFolderNodesCachedAsync(MegaLink link, CancellationToken ct) =>
+        _folderCache.GetOrAdd($"{link.Id}:{link.Key}", _ => _api.GetFolderAsync(link, ct));
 
     // Parallel.ForEachAsync wraps a single worker failure as-is but wraps 2+ concurrent
     // failures in an AggregateException; this unwraps either case to the first real cause.

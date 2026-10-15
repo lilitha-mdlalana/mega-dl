@@ -1,0 +1,45 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:MegaDl.Desktop.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="520"
+        x:Class="MegaDl.Desktop.Views.FolderPickerWindow"
+        x:DataType="vm:FolderPickerViewModel"
+        Title="Choose files to download"
+        Width="560" Height="520" MinWidth="380" MinHeight="300">
+
+  <DockPanel Margin="12">
+
+    <!-- ─── Footer: selection summary + actions ─────────────────────────── -->
+    <Grid DockPanel.Dock="Bottom" Margin="0,12,0,0" ColumnDefinitions="*,Auto,Auto">
+      <TextBlock Text="{Binding SelectionText}" Classes="muted" VerticalAlignment="Center" />
+      <Button Grid.Column="1" Content="Cancel" Command="{Binding CancelCommand}" />
+      <Button Grid.Column="2" Classes="accent" Margin="8,0,0,0" Content="Download selected"
+              Command="{Binding DownloadSelectedCommand}" />
+    </Grid>
+
+    <!-- ─── Body ─────────────────────────────────────────────────────────── -->
+    <Panel>
+      <TextBlock IsVisible="{Binding IsLoading}" Text="Loading folder…" Classes="muted"
+                 HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+      <TextBlock IsVisible="{Binding ErrorText, Converter={x:Static ObjectConverters.IsNotNull}}"
+                 Text="{Binding ErrorText}" Classes="error muted"
+                 HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap" />
+
+      <TreeView ItemsSource="{Binding Roots}"
+                IsVisible="{Binding !IsLoading}">
+        <TreeView.ItemTemplate>
+          <TreeDataTemplate ItemsSource="{Binding Children}" x:DataType="vm:FolderPickerNodeViewModel">
+            <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,2">
+              <CheckBox IsThreeState="True" IsChecked="{Binding IsChecked}" />
+              <TextBlock Grid.Column="1" Text="{Binding Name}" Margin="4,0" TextTrimming="CharacterEllipsis" />
+              <TextBlock Grid.Column="2" Text="{Binding SizeText}" Classes="muted" Margin="12,0,0,0" />
+            </Grid>
+          </TreeDataTemplate>
+        </TreeView.ItemTemplate>
+      </TreeView>
+    </Panel>
+  </DockPanel>
+</Window>

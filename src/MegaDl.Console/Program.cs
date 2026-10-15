@@ -62,7 +62,7 @@ try
     if (command == "info")
     {
         foreach (var f in files)
-            Console.WriteLine($"  [{f.Handle}] {BuildRelativePath(byHandle, f)}  ({Format(f.Size)})");
+            Console.WriteLine($"  [{f.Handle}] {f.BuildRelativePath(byHandle)}  ({Format(f.Size)})");
         return 0;
     }
 
@@ -70,9 +70,10 @@ try
     foreach (FolderNode node in files)
     {
         RemoteFileInfo file = await api.GetFileInFolderAsync(link.Id, node, cts.Token);
-        string path = Path.Combine(dir, BuildRelativePath(byHandle, node));
+        string relativePath = node.BuildRelativePath(byHandle);
+        string path = Path.Combine(dir, relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        Console.WriteLine($"\n{BuildRelativePath(byHandle, node)}:");
+        Console.WriteLine($"\n{relativePath}:");
         int code = await DownloadOneAsync(file, path);
         if (code != 0) exitCode = code;
     }
@@ -112,20 +113,6 @@ async Task<int> DownloadOneAsync(RemoteFileInfo file, string path)
         ? $"\nSaved to {path}\nOK: integrity check (MEGA meta MAC) passed."
         : $"\nMISMATCH: downloaded data doesn't match MEGA's meta MAC. Left as {path}.part for inspection.");
     return ok ? 0 : 2;
-}
-
-// <download folder>/<folder name>/<subfolder path>/<file name> — walks the parent chain
-// the "f" listing gives us back up to the folder's root.
-static string BuildRelativePath(IReadOnlyDictionary<string, FolderNode> byHandle, FolderNode node)
-{
-    var parts = new List<string> { node.Name };
-    string? parentHandle = node.ParentHandle;
-    while (parentHandle is not null && byHandle.TryGetValue(parentHandle, out FolderNode? parent))
-    {
-        parts.Insert(0, parent.Name);
-        parentHandle = parent.ParentHandle;
-    }
-    return Path.Combine(parts.ToArray());
 }
 
 // Parallel.ForEachAsync wraps a single worker failure as-is but wraps 2+ concurrent

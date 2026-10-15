@@ -3,11 +3,19 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MegaDl.Core;
+using MegaDl.Core.Api;
 using MegaDl.Core.Links;
 using MegaDl.Core.Transfers;
 using MegaDl.Desktop.Services;
 
 namespace MegaDl.Desktop.ViewModels;
+
+/// <summary>
+/// A pasted folder link needs a file picked before it can be downloaded. The view owns
+/// showing the dialog (it's UI); this just hands over the link and gets back which files
+/// (if any — null means cancelled) the user chose.
+/// </summary>
+public sealed record FolderPickerRequest(MegaLink Link, Action<IReadOnlyList<FolderNode>?> Completed);
 
 /// <summary>
 /// Java port note: replaces the transfer-list parts of MainPanel.java / MainPanelView.java.
@@ -34,6 +42,10 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private string _totalSpeedText = "";
     [ObservableProperty] private bool _isEmpty = true;
 
+    /// <summary>Raised when a pasted link is a folder — the view shows the picker dialog
+    /// and reports back which files (if any) got chosen.</summary>
+    public event Action<FolderPickerRequest>? FolderPickerRequested;
+
     /// <summary>Used by the XAML previewer only.</summary>
     public MainWindowViewModel() : this(new SimulatedTransferEngine()) { }
 
@@ -56,11 +68,27 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        foreach (var link in links) _engine.Enqueue(link, _downloadDir);
+        foreach (var link in links)
+        {
+            if (link.Kind == MegaLinkKind.Folder)
+                FolderPickerRequested?.Invoke(new FolderPickerRequest(link, OnFolderPicked(link)));
+            else
+                _engine.Enqueue(link, _downloadDir);
+        }
+
         LinkError = null;
         LinkText = "";
         Sync(); // show the new rows immediately instead of waiting for the next tick
     }
+
+    private Action<IReadOnlyList<FolderNode>?> OnFolderPicked(MegaLink folderLink) => chosen =>
+    {
+        if (chosen is null) return; // cancelled
+
+        foreach (FolderNode node in chosen)
+            _engine.Enqueue(new MegaLink(MegaLinkKind.FileInFolder, folderLink.Id, folderLink.Key, node.Handle), _downloadDir);
+        Sync();
+    };
 
     [RelayCommand]
     private void PauseAll() { foreach (var d in Downloads) _engine.Pause(d.Id); }
