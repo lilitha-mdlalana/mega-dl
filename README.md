@@ -1,10 +1,17 @@
 # MegaDl
 
-A bare-bones C# / .NET 10 + Avalonia port of [MegaBasterd](https://github.com/tonikelope/megabasterd), Windows first.
-Scope: downloading (with per-folder grouping), clipboard watcher, smart proxy, and settings (theme, font, download folder). Nothing else.
+A small, fast MEGA downloader for Windows (C# / .NET 10 + Avalonia).
 
-> Status: **Phase 0 (foundations)**. The crypto and download engine work and are tested; the desktop UI runs on a
-> simulated engine. See [`docs/PORT_PLAN.md`](docs/PORT_PLAN.md) for the roadmap.
+Paste a MEGA file or folder link and it downloads — parallel chunked downloads with
+resume, a folder picker for grabbing just the files you want, downloads grouped by
+folder in the list, a clipboard watcher that offers to download links you copy, and
+settings for theme, font and where files land. Nothing else — no accounts, no uploads,
+no streaming server.
+
+> Status: **Phases 0–3 done** (crypto, real downloads, the queue engine, folder links,
+> folder grouping in the list, settings + clipboard watcher — all verified against real
+> MEGA links). Smart proxy (Phase 4) and a shipped Windows build (Phase 5) are next.
+> See [`docs/PORT_PLAN.md`](docs/PORT_PLAN.md) for the roadmap.
 
 ## Layout
 
@@ -23,11 +30,11 @@ Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download).
 
 ```bash
 dotnet build                                   # restores Avalonia etc. from NuGet
-dotnet test                                    # crypto, chunk layout, link parsing
+dotnet test                                    # crypto, chunk layout, link parsing, settings
 
-dotnet run --project src/MegaDl.Desktop        # the UI (simulated downloads for now)
+dotnet run --project src/MegaDl.Desktop        # the app
 
-# real MEGA, public file links:
+# headless, real MEGA links:
 dotnet run --project src/MegaDl.Console -- info "https://mega.nz/file/<id>#<key>"
 dotnet run --project src/MegaDl.Console -- get  "https://mega.nz/file/<id>#<key>" ./downloads
 ```
@@ -36,6 +43,7 @@ Tip: in a Debug build of the desktop app, press **F12** for Avalonia DevTools (a
 
 ## License
 
-GPL-3.0, inherited from MegaBasterd because this is a derivative work. See `LICENSE`.
+GPL-3.0 — this project builds on ideas and protocol details from
+[MegaBasterd](https://github.com/tonikelope/megabasterd), also GPL-3.0. See `LICENSE`.
 
 Do not use this software in any way that violates [MEGA's terms of use](https://mega.io/terms).

@@ -1,0 +1,54 @@
+name: Windows build
+
+# Cross-compiling win-x64 doesn't need a Windows runner — dotnet publish -r win-x64
+# works fine from Linux, it's just packaging a self-contained output.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write # needed to attach the zip to a GitHub Release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Test
+        run: dotnet test --configuration Release --no-restore
+
+      - name: Publish win-x64 (single file, self-contained)
+        run: >
+          dotnet publish src/MegaDl.Desktop -c Release -r win-x64 --self-contained
+          -p:PublishSingleFile=true -o publish/win-x64
+
+      - name: Zip the build
+        run: |
+          cd publish/win-x64
+          zip -r ../../MegaDl-win-x64.zip .
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MegaDl-win-x64
+          path: MegaDl-win-x64.zip
+          retention-days: 30
+
+      # Only when the push was a version tag (e.g. `git tag v0.1.0 && git push --tags`):
+      # attach the same zip to a GitHub Release instead of just the 30-day artifact.
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: MegaDl-win-x64.zip

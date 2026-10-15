@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Input.Platform;
 using Avalonia.Threading;
 using MegaDl.Core.Links;
 
@@ -32,7 +33,8 @@ public sealed class ClipboardWatcher(TopLevel topLevel) : IDisposable
 
             if (!Enabled) continue;
 
-            string? text = await Dispatcher.UIThread.InvokeAsync(async () => await (topLevel.Clipboard?.GetTextAsync() ?? Task.FromResult<string?>(null)));
+            string? text = await Dispatcher.UIThread.InvokeAsync(async () =>
+                topLevel.Clipboard is { } clipboard ? await clipboard.TryGetTextAsync() : null);
             if (text is null || text == _lastText) continue;
             _lastText = text;
 
