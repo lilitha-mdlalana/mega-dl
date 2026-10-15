@@ -1,0 +1,47 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:MegaDl.Desktop.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="420" d:DesignHeight="400"
+        x:Class="MegaDl.Desktop.Views.SettingsWindow"
+        x:DataType="vm:SettingsViewModel"
+        Title="Settings"
+        Width="420" Height="400" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+  <Design.DataContext>
+    <vm:SettingsViewModel />
+  </Design.DataContext>
+
+  <StackPanel Margin="20" Spacing="18">
+
+    <StackPanel Spacing="6">
+      <TextBlock Text="Theme" FontWeight="SemiBold" />
+      <ComboBox ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}" HorizontalAlignment="Stretch" />
+    </StackPanel>
+
+    <StackPanel Spacing="6">
+      <TextBlock Text="Font" FontWeight="SemiBold" />
+      <Grid ColumnDefinitions="*,Auto">
+        <ComboBox ItemsSource="{Binding FontFamilies}" SelectedItem="{Binding FontFamily}" HorizontalAlignment="Stretch" />
+        <NumericUpDown Grid.Column="1" Value="{Binding FontSize}" Minimum="8" Maximum="32" Width="90" Margin="8,0,0,0" />
+      </Grid>
+    </StackPanel>
+
+    <StackPanel Spacing="6">
+      <TextBlock Text="Download folder" FontWeight="SemiBold" />
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBox Text="{Binding DownloadFolder}" IsReadOnly="True" />
+        <Button Grid.Column="1" Content="Browse…" Margin="8,0,0,0" Command="{Binding BrowseDownloadFolderCommand}" />
+      </Grid>
+    </StackPanel>
+
+    <StackPanel Spacing="6">
+      <CheckBox Content="Watch clipboard for MEGA links" IsChecked="{Binding ClipboardWatcherEnabled}" />
+      <TextBlock Text="Asks before downloading anything it finds — it never starts a download on its own."
+                 Classes="muted" TextWrapping="Wrap" />
+    </StackPanel>
+
+  </StackPanel>
+</Window>

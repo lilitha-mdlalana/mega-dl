@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using MegaDl.Core;
 using MegaDl.Core.Api;
 using MegaDl.Core.Links;
+using MegaDl.Core.Settings;
 using MegaDl.Core.Transfers;
 using MegaDl.Desktop.Services;
 
@@ -27,11 +28,16 @@ public sealed record FolderPickerRequest(MegaLink Link, Action<IReadOnlyList<Fol
 public partial class MainWindowViewModel : ViewModelBase
 {
     private readonly ITransferEngine _engine;
+    private readonly AppSettings _settings;
     private readonly Dictionary<Guid, TransferItemViewModel> _byId = [];
     private readonly Dictionary<Guid, string> _groupKeyById = [];
     private readonly Dictionary<string, DownloadGroupViewModel> _groupsByKey = [];
-    private readonly string _downloadDir =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+
+    // What's already been queued (by this session), so the clipboard watcher doesn't
+    // re-prompt for a link the user already asked for.
+    private readonly HashSet<string> _queuedLinkKeys = [];
+
+    private string DownloadDir => _settings.ResolvedDownloadFolder;
 
     /// <summary>One collapsible section per folder link, plus a shared "Single files" one (Phase 2c).</summary>
     public ObservableCollection<DownloadGroupViewModel> Groups { get; } = [];
@@ -45,16 +51,28 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private string _totalSpeedText = "";
     [ObservableProperty] private bool _isEmpty = true;
 
+    // "Found N MEGA links. Download? [Download] [Ignore]" — Phase 3's clipboard watcher
+    // asks, it never auto-starts.
+    [ObservableProperty] private bool _clipboardPromptVisible;
+    [ObservableProperty] private string _clipboardPromptText = "";
+    private IReadOnlyList<MegaLink> _clipboardPromptLinks = [];
+
     /// <summary>Raised when a pasted link is a folder — the view shows the picker dialog
     /// and reports back which files (if any) got chosen.</summary>
     public event Action<FolderPickerRequest>? FolderPickerRequested;
 
-    /// <summary>Used by the XAML previewer only.</summary>
-    public MainWindowViewModel() : this(new SimulatedTransferEngine()) { }
+    /// <summary>Raised by the "Settings" button — the view owns showing that dialog.</summary>
+    public event Action? SettingsRequested;
 
-    public MainWindowViewModel(ITransferEngine engine)
+    public AppSettings Settings => _settings;
+
+    /// <summary>Used by the XAML previewer only.</summary>
+    public MainWindowViewModel() : this(new SimulatedTransferEngine(), new AppSettings()) { }
+
+    public MainWindowViewModel(ITransferEngine engine, AppSettings settings)
     {
         _engine = engine;
+        _settings = settings;
         var timer = new DispatcherTimer(TimeSpan.FromMilliseconds(250), DispatcherPriority.Background, (_, _) => Sync());
         timer.Start();
     }
@@ -71,27 +89,61 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
+        QueueLinks(links);
+        LinkError = null;
+        LinkText = "";
+    }
+
+    [RelayCommand]
+    private void AcceptClipboardPrompt()
+    {
+        ClipboardPromptVisible = false;
+        QueueLinks(_clipboardPromptLinks);
+    }
+
+    [RelayCommand]
+    private void DismissClipboardPrompt() => ClipboardPromptVisible = false;
+
+    /// <summary>Called by the clipboard watcher (a View-layer service — it needs a TopLevel)
+    /// whenever it spots new MEGA links. Never auto-starts: shows the ask-first banner instead.</summary>
+    public void OnClipboardLinksFound(IReadOnlyList<MegaLink> links)
+    {
+        List<MegaLink> newLinks = links.Where(l => !_queuedLinkKeys.Contains(LinkKey(l))).ToList();
+        if (newLinks.Count == 0) return;
+
+        _clipboardPromptLinks = newLinks;
+        ClipboardPromptText = newLinks.Count == 1
+            ? "Found a MEGA link on your clipboard."
+            : $"Found {newLinks.Count} MEGA links on your clipboard.";
+        ClipboardPromptVisible = true;
+    }
+
+    private void QueueLinks(IEnumerable<MegaLink> links)
+    {
         foreach (var link in links)
         {
+            _queuedLinkKeys.Add(LinkKey(link));
             if (link.Kind == MegaLinkKind.Folder)
                 FolderPickerRequested?.Invoke(new FolderPickerRequest(link, OnFolderPicked(link)));
             else
-                _engine.Enqueue(link, _downloadDir);
+                _engine.Enqueue(link, DownloadDir);
         }
-
-        LinkError = null;
-        LinkText = "";
         Sync(); // show the new rows immediately instead of waiting for the next tick
     }
+
+    private static string LinkKey(MegaLink link) => $"{link.Kind}:{link.Id}:{link.ChildId}";
 
     private Action<IReadOnlyList<FolderNode>?> OnFolderPicked(MegaLink folderLink) => chosen =>
     {
         if (chosen is null) return; // cancelled
 
         foreach (FolderNode node in chosen)
-            _engine.Enqueue(new MegaLink(MegaLinkKind.FileInFolder, folderLink.Id, folderLink.Key, node.Handle), _downloadDir);
+            _engine.Enqueue(new MegaLink(MegaLinkKind.FileInFolder, folderLink.Id, folderLink.Key, node.Handle), DownloadDir);
         Sync();
     };
+
+    [RelayCommand]
+    private void OpenSettings() => SettingsRequested?.Invoke();
 
     [RelayCommand]
     private void PauseAll() { foreach (var d in _byId.Values) _engine.Pause(d.Id); }

@@ -18,7 +18,7 @@
 
     <!-- ─── Toolbar: paste links ─────────────────────────────────────────── -->
     <Border DockPanel.Dock="Top" Classes="toolbar">
-      <Grid ColumnDefinitions="*,Auto,Auto,Auto" RowDefinitions="Auto,Auto">
+      <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" RowDefinitions="Auto,Auto">
         <TextBox Text="{Binding LinkText}"
                  Watermark="Paste one or more MEGA links…" />
         <!-- IsDefault: pressing Enter anywhere in the window clicks this button. -->
@@ -31,10 +31,22 @@
         </Button>
         <Button Grid.Column="2" Margin="8,0,0,0" Content="Pause all" Command="{Binding PauseAllCommand}" />
         <Button Grid.Column="3" Margin="8,0,0,0" Content="Resume all" Command="{Binding ResumeAllCommand}" />
+        <Button Grid.Column="4" Margin="8,0,0,0" Content="Settings…" Command="{Binding OpenSettingsCommand}" />
 
-        <TextBlock Grid.Row="1" Grid.ColumnSpan="4" Classes="error"
+        <TextBlock Grid.Row="1" Grid.ColumnSpan="5" Classes="error"
                    Text="{Binding LinkError}"
                    IsVisible="{Binding LinkError, Converter={x:Static ObjectConverters.IsNotNull}}" />
+      </Grid>
+    </Border>
+
+    <!-- ─── Clipboard-watcher prompt: ask, never auto-start (Phase 3) ──────── -->
+    <Border DockPanel.Dock="Top" Classes="toolbar" IsVisible="{Binding ClipboardPromptVisible}">
+      <Grid ColumnDefinitions="*,Auto,Auto">
+        <TextBlock Text="{Binding ClipboardPromptText}" VerticalAlignment="Center" />
+        <Button Grid.Column="1" Classes="accent" Content="Download" Margin="8,0,0,0"
+                Command="{Binding AcceptClipboardPromptCommand}" />
+        <Button Grid.Column="2" Content="Ignore" Margin="8,0,0,0"
+                Command="{Binding DismissClipboardPromptCommand}" />
       </Grid>
     </Border>
 
