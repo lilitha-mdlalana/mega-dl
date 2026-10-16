@@ -52,11 +52,14 @@
 
     <!-- ─── Status bar ───────────────────────────────────────────────────── -->
     <Border DockPanel.Dock="Bottom" Classes="statusbar">
-      <Grid ColumnDefinitions="*,Auto,Auto">
+      <Grid ColumnDefinitions="*,Auto,Auto,Auto">
         <TextBlock Text="{Binding StatusText}" Classes="muted" VerticalAlignment="Center" />
-        <TextBlock Grid.Column="1" Text="{Binding TotalSpeedText}" FontWeight="SemiBold"
+        <TextBlock Grid.Column="1" Text="{Binding SmartProxyStatusText}" Classes="muted"
+                   VerticalAlignment="Center" Margin="0,0,12,0"
+                   IsVisible="{Binding SmartProxyStatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        <TextBlock Grid.Column="2" Text="{Binding TotalSpeedText}" FontWeight="SemiBold"
                    VerticalAlignment="Center" Margin="0,0,12,0" />
-        <Button Grid.Column="2" Content="Clear completed" Command="{Binding ClearCompletedCommand}" />
+        <Button Grid.Column="3" Content="Clear completed" Command="{Binding ClearCompletedCommand}" />
       </Grid>
     </Border>
 

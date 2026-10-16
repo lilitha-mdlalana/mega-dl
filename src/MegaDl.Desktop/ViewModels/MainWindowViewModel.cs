@@ -66,6 +66,11 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public AppSettings Settings => _settings;
 
+    /// <summary>Exposed so the Settings dialog can reload the proxy list and the status bar can read it (Phase 4).</summary>
+    public ITransferEngine Engine => _engine;
+
+    [ObservableProperty] private string _smartProxyStatusText = "";
+
     /// <summary>Used by the XAML previewer only.</summary>
     public MainWindowViewModel() : this(new SimulatedTransferEngine(), new AppSettings()) { }
 
@@ -228,5 +233,9 @@ public partial class MainWindowViewModel : ViewModelBase
         StatusText = IsEmpty
             ? "Paste a MEGA link to start."
             : $"{running} downloading · {queued} queued · {done} done";
+
+        SmartProxyStatusText = _settings.SmartProxyEnabled && _engine is TransferManager { ProxyPool: { } pool }
+            ? $"SmartProxy: ON ({pool.AvailableCount} available)"
+            : "";
     }
 }

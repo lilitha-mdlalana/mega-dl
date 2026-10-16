@@ -3,45 +3,77 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:MegaDl.Desktop.ViewModels"
-        mc:Ignorable="d" d:DesignWidth="420" d:DesignHeight="400"
+        mc:Ignorable="d" d:DesignWidth="440" d:DesignHeight="640"
         x:Class="MegaDl.Desktop.Views.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
         Title="Settings"
-        Width="420" Height="400" CanResize="False"
+        Width="440" Height="640" MinWidth="380" MinHeight="420"
         WindowStartupLocation="CenterOwner">
 
   <Design.DataContext>
     <vm:SettingsViewModel />
   </Design.DataContext>
 
-  <StackPanel Margin="20" Spacing="18">
+  <ScrollViewer>
+    <StackPanel Margin="20" Spacing="18">
 
-    <StackPanel Spacing="6">
-      <TextBlock Text="Theme" FontWeight="SemiBold" />
-      <ComboBox ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}" HorizontalAlignment="Stretch" />
+      <StackPanel Spacing="6">
+        <TextBlock Text="Theme" FontWeight="SemiBold" />
+        <ComboBox ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}" HorizontalAlignment="Stretch" />
+      </StackPanel>
+
+      <StackPanel Spacing="6">
+        <TextBlock Text="Font" FontWeight="SemiBold" />
+        <Grid ColumnDefinitions="*,Auto">
+          <ComboBox ItemsSource="{Binding FontFamilies}" SelectedItem="{Binding FontFamily}" HorizontalAlignment="Stretch" />
+          <NumericUpDown Grid.Column="1" Value="{Binding FontSize}" Minimum="8" Maximum="32" Width="90" Margin="8,0,0,0" />
+        </Grid>
+      </StackPanel>
+
+      <StackPanel Spacing="6">
+        <TextBlock Text="Download folder" FontWeight="SemiBold" />
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBox Text="{Binding DownloadFolder}" IsReadOnly="True" />
+          <Button Grid.Column="1" Content="Browse…" Margin="8,0,0,0" Command="{Binding BrowseDownloadFolderCommand}" />
+        </Grid>
+      </StackPanel>
+
+      <StackPanel Spacing="6">
+        <CheckBox Content="Watch clipboard for MEGA links" IsChecked="{Binding ClipboardWatcherEnabled}" />
+        <TextBlock Text="Asks before downloading anything it finds — it never starts a download on its own."
+                   Classes="muted" TextWrapping="Wrap" />
+      </StackPanel>
+
+      <Border BorderThickness="0,1,0,0" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" Padding="0,14,0,0">
+        <StackPanel Spacing="10">
+          <TextBlock Text="Smart proxy" FontWeight="SemiBold" />
+          <TextBlock Classes="muted" TextWrapping="Wrap"
+                     Text="Once MEGA returns a quota error (509), route that download's remaining chunks through a proxy from the list below instead of giving up." />
+
+          <CheckBox Content="Enable smart proxy" IsChecked="{Binding SmartProxyEnabled}" />
+          <CheckBox Content="Always use a proxy (don't wait for a 509 first)" IsChecked="{Binding SmartProxyForce}"
+                     IsEnabled="{Binding SmartProxyEnabled}" Margin="20,0,0,0" />
+
+          <Grid ColumnDefinitions="*,*" IsEnabled="{Binding SmartProxyEnabled}">
+            <StackPanel Spacing="4">
+              <TextBlock Text="Ban time (seconds)" Classes="muted" />
+              <NumericUpDown Value="{Binding SmartProxyBanSeconds}" Minimum="0" Maximum="86400" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Spacing="4" Margin="8,0,0,0">
+              <TextBlock Text="Timeout (seconds)" Classes="muted" />
+              <NumericUpDown Value="{Binding SmartProxyTimeoutSeconds}" Minimum="1" Maximum="120" />
+            </StackPanel>
+          </Grid>
+
+          <StackPanel Spacing="4" IsEnabled="{Binding SmartProxyEnabled}">
+            <TextBlock Classes="muted"
+                       Text="One per line: IP:PORT (HTTP), *IP:PORT or socks5://IP:PORT (SOCKS), IP:PORT@b64user:b64pass (auth), #https://… (fetch more from a URL)." />
+            <TextBox Text="{Binding ProxyList}" AcceptsReturn="True" Height="110"
+                     FontFamily="Consolas,Menlo,monospace" TextWrapping="NoWrap" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
     </StackPanel>
-
-    <StackPanel Spacing="6">
-      <TextBlock Text="Font" FontWeight="SemiBold" />
-      <Grid ColumnDefinitions="*,Auto">
-        <ComboBox ItemsSource="{Binding FontFamilies}" SelectedItem="{Binding FontFamily}" HorizontalAlignment="Stretch" />
-        <NumericUpDown Grid.Column="1" Value="{Binding FontSize}" Minimum="8" Maximum="32" Width="90" Margin="8,0,0,0" />
-      </Grid>
-    </StackPanel>
-
-    <StackPanel Spacing="6">
-      <TextBlock Text="Download folder" FontWeight="SemiBold" />
-      <Grid ColumnDefinitions="*,Auto">
-        <TextBox Text="{Binding DownloadFolder}" IsReadOnly="True" />
-        <Button Grid.Column="1" Content="Browse…" Margin="8,0,0,0" Command="{Binding BrowseDownloadFolderCommand}" />
-      </Grid>
-    </StackPanel>
-
-    <StackPanel Spacing="6">
-      <CheckBox Content="Watch clipboard for MEGA links" IsChecked="{Binding ClipboardWatcherEnabled}" />
-      <TextBlock Text="Asks before downloading anything it finds — it never starts a download on its own."
-                 Classes="muted" TextWrapping="Wrap" />
-    </StackPanel>
-
-  </StackPanel>
+  </ScrollViewer>
 </Window>

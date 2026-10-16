@@ -19,6 +19,13 @@ public sealed class AppSettings
     public string? DownloadFolder { get; set; }     // null = default (~/Downloads), see ResolvedDownloadFolder
     public bool ClipboardWatcherEnabled { get; set; } = true;
 
+    // Phase 4: smart proxy. See MegaDl.Core.Proxy.ProxyPool for the list format.
+    public bool SmartProxyEnabled { get; set; }
+    public bool SmartProxyForce { get; set; }       // use proxies from the start, not just after a 509
+    public int SmartProxyBanSeconds { get; set; } = 300;
+    public int SmartProxyTimeoutSeconds { get; set; } = 10;
+    public string ProxyList { get; set; } = "";
+
     [JsonIgnore]
     public string ResolvedDownloadFolder =>
         string.IsNullOrWhiteSpace(DownloadFolder)

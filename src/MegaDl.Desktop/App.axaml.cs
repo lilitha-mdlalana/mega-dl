@@ -23,7 +23,7 @@ public partial class App : Application
 
             var http = new HttpClient { Timeout = TimeSpan.FromMinutes(2) };
             http.DefaultRequestHeaders.UserAgent.ParseAdd("MegaDl/0.1");
-            var engine = new TransferManager(http);
+            var engine = new TransferManager(http, settings: settings);
             desktop.MainWindow = new MainWindow { DataContext = new MainWindowViewModel(engine, settings) };
             desktop.ShutdownRequested += (_, _) => { engine.Dispose(); http.Dispose(); };
         }

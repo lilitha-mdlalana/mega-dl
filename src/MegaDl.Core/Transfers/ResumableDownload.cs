@@ -1,6 +1,7 @@
 using Microsoft.Win32.SafeHandles;
 using MegaDl.Core.Api;
 using MegaDl.Core.Crypto;
+using MegaDl.Core.Proxy;
 
 namespace MegaDl.Core.Transfers;
 
@@ -35,13 +36,14 @@ public sealed class ResumableDownload : IDisposable
     public string DestinationPath { get; }
     public long BytesDone => Interlocked.Read(ref _bytesDone);
 
-    public ResumableDownload(HttpClient http, RemoteFileInfo file, string destinationPath, DownloadOptions? options = null)
+    public ResumableDownload(HttpClient http, RemoteFileInfo file, string destinationPath, DownloadOptions? options = null,
+        ProxyPool? proxyPool = null, SmartProxySettings? proxySettings = null)
     {
         _file = file;
         DestinationPath = destinationPath;
         _partPath = destinationPath + ".part";
         _opt = options ?? new DownloadOptions();
-        _chunkFetcher = new FileDownloader(http, _opt);
+        _chunkFetcher = new FileDownloader(http, _opt, proxyPool, proxySettings);
         _downloadChunks = ChunkLayout.For(file.Size, _opt.ChunkMultiplier).Where(c => c.Size > 0).ToList();
         _macChunks = ChunkLayout.For(file.Size).ToList();
         _mac = new MegaMac(file.Key);

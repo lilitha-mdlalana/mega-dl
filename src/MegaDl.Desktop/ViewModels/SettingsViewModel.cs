@@ -4,6 +4,7 @@ using Avalonia.Styling;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MegaDl.Core.Settings;
+using MegaDl.Core.Transfers;
 using MegaDl.Desktop.Services;
 
 namespace MegaDl.Desktop.ViewModels;
@@ -18,6 +19,7 @@ public partial class SettingsViewModel : ObservableObject
 {
     private readonly AppSettings _settings;
     private readonly ClipboardWatcher? _clipboardWatcher;
+    private readonly TransferManager? _transferManager;
     private bool _loading;
 
     public IReadOnlyList<AppTheme> Themes { get; } = Enum.GetValues<AppTheme>();
@@ -30,13 +32,21 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _downloadFolder = "";
     [ObservableProperty] private bool _clipboardWatcherEnabled;
 
+    // Phase 4: smart proxy.
+    [ObservableProperty] private bool _smartProxyEnabled;
+    [ObservableProperty] private bool _smartProxyForce;
+    [ObservableProperty] private int _smartProxyBanSeconds;
+    [ObservableProperty] private int _smartProxyTimeoutSeconds;
+    [ObservableProperty] private string _proxyList = "";
+
     /// <summary>Raised by the "Browse…" button; the view owns the folder-picker dialog (it needs a TopLevel).</summary>
     public event Action<Action<string?>>? BrowseDownloadFolderRequested;
 
-    public SettingsViewModel(AppSettings settings, ClipboardWatcher? clipboardWatcher)
+    public SettingsViewModel(AppSettings settings, ClipboardWatcher? clipboardWatcher, TransferManager? transferManager = null)
     {
         _settings = settings;
         _clipboardWatcher = clipboardWatcher;
+        _transferManager = transferManager;
 
         _loading = true;
         Theme = settings.Theme;
@@ -44,6 +54,11 @@ public partial class SettingsViewModel : ObservableObject
         FontSize = settings.FontSize;
         DownloadFolder = settings.ResolvedDownloadFolder;
         ClipboardWatcherEnabled = settings.ClipboardWatcherEnabled;
+        SmartProxyEnabled = settings.SmartProxyEnabled;
+        SmartProxyForce = settings.SmartProxyForce;
+        SmartProxyBanSeconds = settings.SmartProxyBanSeconds;
+        SmartProxyTimeoutSeconds = settings.SmartProxyTimeoutSeconds;
+        ProxyList = settings.ProxyList;
         _loading = false;
     }
 
@@ -81,6 +96,17 @@ public partial class SettingsViewModel : ObservableObject
     {
         if (_clipboardWatcher is not null) _clipboardWatcher.Enabled = value;
         Persist(s => s.ClipboardWatcherEnabled = value);
+    }
+
+    partial void OnSmartProxyEnabledChanged(bool value) => Persist(s => s.SmartProxyEnabled = value);
+    partial void OnSmartProxyForceChanged(bool value) => Persist(s => s.SmartProxyForce = value);
+    partial void OnSmartProxyBanSecondsChanged(int value) => Persist(s => s.SmartProxyBanSeconds = value);
+    partial void OnSmartProxyTimeoutSecondsChanged(int value) => Persist(s => s.SmartProxyTimeoutSeconds = value);
+
+    partial void OnProxyListChanged(string value)
+    {
+        Persist(s => s.ProxyList = value);
+        _transferManager?.ReloadProxyList();
     }
 
     private void Persist(Action<AppSettings> apply)

@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using MegaDl.Core.Api;
 using MegaDl.Core.Links;
+using MegaDl.Core.Proxy;
+using MegaDl.Core.Settings;
 
 namespace MegaDl.Core.Transfers;
 
@@ -47,6 +49,7 @@ public sealed class TransferManager : ITransferEngine, IDisposable
     private readonly HttpClient _http;
     private readonly MegaApiClient _api;
     private readonly DownloadOptions _downloadOptions;
+    private readonly AppSettings? _settings;
     private readonly SemaphoreSlim _concurrency;
     private readonly List<Job> _jobs = [];
     private readonly Lock _lock = new();
@@ -57,14 +60,32 @@ public sealed class TransferManager : ITransferEngine, IDisposable
     // job queued from it (the picker typically queues many at once).
     private readonly ConcurrentDictionary<string, Task<IReadOnlyList<FolderNode>>> _folderCache = new();
 
-    public TransferManager(HttpClient http, int maxConcurrent = DefaultMaxConcurrent, DownloadOptions? downloadOptions = null)
+    /// <summary>Phase 4: shared across every download, since a proxy banned by one should stay banned for all. Null when no settings were given (e.g. tests).</summary>
+    public ProxyPool? ProxyPool { get; }
+
+    public TransferManager(HttpClient http, int maxConcurrent = DefaultMaxConcurrent, DownloadOptions? downloadOptions = null,
+        AppSettings? settings = null)
     {
         _http = http;
         _api = new MegaApiClient(http);
         _downloadOptions = downloadOptions ?? DefaultDownloadOptions;
+        _settings = settings;
         _concurrency = new SemaphoreSlim(maxConcurrent);
         _speedLoop = Task.Run(() => SpeedLoopAsync(_shutdown.Token));
+
+        if (settings is not null)
+        {
+            ProxyPool = new ProxyPool();
+            ProxyPool.LoadList(settings.ProxyList);
+        }
     }
+
+    /// <summary>Call after editing the proxy list in Settings — picked up by the next download that needs one.</summary>
+    public void ReloadProxyList() => ProxyPool?.LoadList(_settings?.ProxyList);
+
+    private SmartProxySettings CurrentSmartProxySettings() => _settings is null
+        ? new SmartProxySettings()
+        : new SmartProxySettings(_settings.SmartProxyEnabled, _settings.SmartProxyForce, _settings.SmartProxyBanSeconds, _settings.SmartProxyTimeoutSeconds);
 
     public Guid Enqueue(MegaLink link, string destinationDirectory)
     {
@@ -172,7 +193,8 @@ public sealed class TransferManager : ITransferEngine, IDisposable
                 lock (_lock) { job.Info = info; job.DestinationPath = destinationPath; job.Name = info.Name; job.Size = info.Size; }
             }
 
-            job.Download ??= new ResumableDownload(_http, job.Info!, job.DestinationPath!, _downloadOptions);
+            job.Download ??= new ResumableDownload(_http, job.Info!, job.DestinationPath!, _downloadOptions,
+                ProxyPool, CurrentSmartProxySettings());
             lock (_lock) job.State = TransferState.Running;
 
             bool ok = await job.Download.RunAsync(token).ConfigureAwait(false);

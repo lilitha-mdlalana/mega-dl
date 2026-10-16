@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using MegaDl.Core.Api;
+using MegaDl.Core.Transfers;
 using MegaDl.Desktop.Services;
 using MegaDl.Desktop.ViewModels;
 
@@ -41,7 +42,8 @@ public partial class MainWindow : Window
     private async void OnSettingsRequested()
     {
         var vm = (MainWindowViewModel)DataContext!;
-        var window = new SettingsWindow(new SettingsViewModel(vm.Settings, _clipboardWatcher));
+        var settingsVm = new SettingsViewModel(vm.Settings, _clipboardWatcher, vm.Engine as TransferManager);
+        var window = new SettingsWindow(settingsVm);
         await window.ShowDialog(this);
     }
 }
