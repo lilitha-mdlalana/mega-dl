@@ -4,6 +4,22 @@
              RequestedThemeVariant="Default">
   <!-- "Default" follows the OS light/dark setting; Settings can override it at runtime. -->
 
+  <!-- Phase 5: closing the main window hides it instead of quitting (see MainWindow.axaml.cs);
+       this tray icon is how you get it back, or quit for real. -->
+  <TrayIcon.Icons>
+    <TrayIcons>
+      <TrayIcon ToolTipText="MegaDl" Icon="avares://MegaDl/Assets/app.ico" Clicked="OnTrayIconClicked">
+        <TrayIcon.Menu>
+          <NativeMenu>
+            <NativeMenuItem Header="Open MegaDl" Click="OnTrayOpenClicked" />
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="Quit" Click="OnTrayQuitClicked" />
+          </NativeMenu>
+        </TrayIcon.Menu>
+      </TrayIcon>
+    </TrayIcons>
+  </TrayIcon.Icons>
+
   <Application.Resources>
     <!-- Phase 3: Settings writes these at runtime; every Window below follows via DynamicResource. -->
     <FontFamily x:Key="AppFontFamily">Default</FontFamily>

@@ -36,6 +36,14 @@ public sealed class ResumableDownload : IDisposable
     public string DestinationPath { get; }
     public long BytesDone => Interlocked.Read(ref _bytesDone);
 
+    /// <summary>Snapshot of which (big) download chunks are already down — persisted across
+    /// app restarts (see <see cref="MegaDl.Core.Transfers.TransferManager"/>'s queue save/restore)
+    /// and replayed via <see cref="SeedCompletedChunksAsync"/>.</summary>
+    public IReadOnlyCollection<long> DoneChunkIds
+    {
+        get { lock (_lock) return _doneChunkIds.ToArray(); }
+    }
+
     public ResumableDownload(HttpClient http, RemoteFileInfo file, string destinationPath, DownloadOptions? options = null,
         ProxyPool? proxyPool = null, SmartProxySettings? proxySettings = null)
     {
@@ -94,6 +102,41 @@ public sealed class ResumableDownload : IDisposable
         bool ok = _mac.Finish().AsSpan().SequenceEqual(_file.Key.MetaMac);
         if (ok) File.Move(_partPath, DestinationPath, overwrite: true);
         return ok;
+    }
+
+    /// <summary>
+    /// Marks the given download chunks as already done, from a previous session's
+    /// <see cref="DoneChunkIds"/> — read back from the existing ".part" file on disk rather
+    /// than re-downloaded, and folded into the meta-MAC exactly as if they'd just landed
+    /// (the MAC state itself is in-memory only, so it has to be rebuilt this way after a
+    /// restart). Best-effort: if the .part file is missing or doesn't match (e.g. deleted,
+    /// corrupted, or MEGA's reported size changed), this quietly seeds nothing and the
+    /// chunks are re-downloaded instead of the restore crashing the job.
+    /// </summary>
+    public async Task SeedCompletedChunksAsync(IEnumerable<long> downloadChunkIds, CancellationToken ct = default)
+    {
+        var ids = new HashSet<long>(downloadChunkIds);
+        if (ids.Count == 0 || !File.Exists(_partPath)) return;
+
+        try
+        {
+            _handle ??= File.OpenHandle(_partPath, FileMode.Open, FileAccess.ReadWrite, FileShare.Read, FileOptions.Asynchronous);
+
+            foreach (Chunk chunk in _downloadChunks.Where(c => ids.Contains(c.Id)).OrderBy(c => c.Id))
+            {
+                byte[] data = new byte[chunk.Size];
+                await RandomAccess.ReadAsync(_handle, data, chunk.Offset, ct).ConfigureAwait(false);
+                FoldMac(chunk, data);
+                lock (_lock) _doneChunkIds.Add(chunk.Id);
+                Interlocked.Add(ref _bytesDone, data.Length);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Couldn't read it back — treat as if nothing was seeded; RunAsync will just
+            // re-download these chunks (and MAC folding for them hasn't started, so no
+            // partial fold to unwind).
+        }
     }
 
     /// <summary>Folds one downloaded (big) chunk's MAC in. Buffers out-of-order arrivals until contiguous.</summary>

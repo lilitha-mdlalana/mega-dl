@@ -7,6 +7,7 @@
         x:Class="MegaDl.Desktop.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="MegaDl"
+        Icon="avares://MegaDl/Assets/app.ico"
         Width="980" Height="620" MinWidth="640" MinHeight="400">
 
   <!-- Gives the IDE previewer live (simulated) data. -->

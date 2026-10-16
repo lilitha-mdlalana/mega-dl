@@ -26,6 +26,10 @@ public partial class SettingsViewModel : ObservableObject
     public IReadOnlyList<string> FontFamilies { get; } =
         [.. FontManager.Current.SystemFonts.Select(f => f.Name).Distinct().OrderBy(n => n)];
 
+    public string AboutText { get; } =
+        $"MegaDl v{System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)} — " +
+        "built on ideas and protocol details from MegaBasterd (GPL-3.0). See LICENSE.";
+
     [ObservableProperty] private AppTheme _theme;
     [ObservableProperty] private string? _fontFamily;
     [ObservableProperty] private double _fontSize;

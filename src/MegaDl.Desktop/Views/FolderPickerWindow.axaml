@@ -7,6 +7,7 @@
         x:Class="MegaDl.Desktop.Views.FolderPickerWindow"
         x:DataType="vm:FolderPickerViewModel"
         Title="Choose files to download"
+        Icon="avares://MegaDl/Assets/app.ico"
         Width="560" Height="520" MinWidth="380" MinHeight="300">
 
   <DockPanel Margin="12">

@@ -4,13 +4,16 @@ A small, fast MEGA downloader for Windows (C# / .NET 10 + Avalonia).
 
 Paste a MEGA file or folder link and it downloads — parallel chunked downloads with
 resume, a folder picker for grabbing just the files you want, downloads grouped by
-folder in the list, a clipboard watcher that offers to download links you copy, and
-settings for theme, font and where files land. Nothing else — no accounts, no uploads,
-no streaming server.
+folder in the list, a clipboard watcher that offers to download links you copy, a smart
+proxy that reroutes around MEGA's quota limit, and settings for theme, font and where
+files land. Closing the window minimizes it to the tray — downloads keep running, and the
+whole queue (including each file's chunk progress) survives an app restart. Nothing else —
+no accounts, no uploads, no streaming server.
 
-> Status: **Phases 0–3 done** (crypto, real downloads, the queue engine, folder links,
-> folder grouping in the list, settings + clipboard watcher — all verified against real
-> MEGA links). Smart proxy (Phase 4) and a shipped Windows build (Phase 5) are next.
+> Status: **Phases 0–5 done** (crypto, real downloads, the queue engine, folder links,
+> folder grouping in the list, settings + clipboard watcher, smart proxy, tray/background
+> running, queue persistence — all verified against real MEGA links). One thing left: a
+> smoke test on an actual Windows machine (everything so far has only run on macOS).
 > See [`docs/PORT_PLAN.md`](docs/PORT_PLAN.md) for the roadmap.
 
 ## Layout

@@ -7,6 +7,7 @@
         x:Class="MegaDl.Desktop.Views.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
         Title="Settings"
+        Icon="avares://MegaDl/Assets/app.ico"
         Width="440" Height="640" MinWidth="380" MinHeight="420"
         WindowStartupLocation="CenterOwner">
 
@@ -71,6 +72,14 @@
             <TextBox Text="{Binding ProxyList}" AcceptsReturn="True" Height="110"
                      FontFamily="Consolas,Menlo,monospace" TextWrapping="NoWrap" />
           </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <Border BorderThickness="0,1,0,0" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" Padding="0,14,0,0">
+        <StackPanel Spacing="4">
+          <TextBlock Text="{Binding AboutText}" Classes="muted" TextWrapping="Wrap" />
+          <TextBlock Text="Closing the main window minimizes it to the tray — right-click the tray icon to quit."
+                     Classes="muted" TextWrapping="Wrap" />
         </StackPanel>
       </Border>
 

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
 using MegaDl.Core.Api;
 using MegaDl.Core.Links;
 using MegaDl.Core.Proxy;
@@ -42,6 +43,7 @@ public sealed class TransferManager : ITransferEngine, IDisposable
         public string? RelativePath;
         public ResumableDownload? Download;
         public CancellationTokenSource LifecycleCts = new();
+        public List<long>? RestoredDoneChunkIds; // from queue.json, consumed once when Download is created
 
         public long BytesDone => Download?.BytesDone ?? 0;
     }
@@ -87,15 +89,71 @@ public sealed class TransferManager : ITransferEngine, IDisposable
         ? new SmartProxySettings()
         : new SmartProxySettings(_settings.SmartProxyEnabled, _settings.SmartProxyForce, _settings.SmartProxyBanSeconds, _settings.SmartProxyTimeoutSeconds);
 
-    public Guid Enqueue(MegaLink link, string destinationDirectory)
+    public Guid Enqueue(MegaLink link, string destinationDirectory) => EnqueueCore(link, destinationDirectory, null);
+
+    private Guid EnqueueCore(MegaLink link, string destinationDirectory, List<long>? restoredDoneChunkIds)
     {
-        var job = new Job { Id = Guid.NewGuid(), Link = link, DestinationDir = destinationDirectory, Name = link.Id };
+        var job = new Job
+        {
+            Id = Guid.NewGuid(), Link = link, DestinationDir = destinationDirectory, Name = link.Id,
+            RestoredDoneChunkIds = restoredDoneChunkIds,
+        };
         // Set the group up front (we already know the folder's id) so the row never
         // briefly shows under "Single files" before jumping to its real group.
         if (link.Kind == MegaLinkKind.FileInFolder) { job.GroupId = link.Id; job.GroupName = "Folder"; }
         lock (_lock) _jobs.Add(job);
         _ = RunLifecycleAsync(job);
         return job.Id;
+    }
+
+    private sealed record PersistedJob(string Link, string DestinationDir, List<long> DoneChunkIds);
+
+    private static string QueueFilePath => Path.Combine(AppSettings.SettingsDirectory, "queue.json");
+
+    /// <summary>
+    /// Phase 5: re-queues whatever was still queued/running/paused when the app last
+    /// closed, each resuming from its saved chunk progress rather than starting over.
+    /// Call once at startup, before anything else touches the engine. Best-effort — a
+    /// missing or corrupt queue.json just means nothing to restore.
+    /// </summary>
+    public void Restore()
+    {
+        List<PersistedJob>? saved;
+        try
+        {
+            if (!File.Exists(QueueFilePath)) return;
+            saved = JsonSerializer.Deserialize<List<PersistedJob>>(File.ReadAllText(QueueFilePath));
+        }
+        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+        {
+            return;
+        }
+
+        foreach (PersistedJob p in saved ?? [])
+            if (MegaLink.TryParse(p.Link, out MegaLink? link) && link is not null)
+                EnqueueCore(link, p.DestinationDir, p.DoneChunkIds);
+    }
+
+    /// <summary>Snapshots every still-active job's progress to queue.json. Called periodically and on shutdown.</summary>
+    private void SaveQueue()
+    {
+        List<PersistedJob> toSave;
+        lock (_lock)
+            toSave = _jobs
+                .Where(j => !j.CancelRequested
+                         && j.State is TransferState.Queued or TransferState.Starting or TransferState.Running or TransferState.Paused)
+                .Select(j => new PersistedJob(j.Link.ToString(), j.DestinationDir, [.. j.Download?.DoneChunkIds ?? []]))
+                .ToList();
+
+        try
+        {
+            Directory.CreateDirectory(AppSettings.SettingsDirectory);
+            File.WriteAllText(QueueFilePath, JsonSerializer.Serialize(toSave));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Best-effort — losing the queue snapshot isn't worth crashing a download over.
+        }
     }
 
     public void Pause(Guid id)
@@ -143,6 +201,9 @@ public sealed class TransferManager : ITransferEngine, IDisposable
         // the rest (paused/failed/completed) have no running task left to do it.
         if (activeRun) job.LifecycleCts.Cancel();
         else job.Download?.Cancel();
+
+        SaveQueue(); // promptly, rather than waiting for the next periodic save — a
+                     // cancelled job's .part file may already be gone by then
     }
 
     public IReadOnlyList<TransferSnapshot> Snapshot()
@@ -193,8 +254,15 @@ public sealed class TransferManager : ITransferEngine, IDisposable
                 lock (_lock) { job.Info = info; job.DestinationPath = destinationPath; job.Name = info.Name; job.Size = info.Size; }
             }
 
-            job.Download ??= new ResumableDownload(_http, job.Info!, job.DestinationPath!, _downloadOptions,
-                ProxyPool, CurrentSmartProxySettings());
+            if (job.Download is null)
+            {
+                job.Download = new ResumableDownload(_http, job.Info!, job.DestinationPath!, _downloadOptions,
+                    ProxyPool, CurrentSmartProxySettings());
+
+                if (job.RestoredDoneChunkIds is { Count: > 0 } restored)
+                    await job.Download.SeedCompletedChunksAsync(restored, token).ConfigureAwait(false);
+                job.RestoredDoneChunkIds = null; // one-shot — only meaningful the first time Download is created
+            }
             lock (_lock) job.State = TransferState.Running;
 
             bool ok = await job.Download.RunAsync(token).ConfigureAwait(false);
@@ -276,6 +344,7 @@ public sealed class TransferManager : ITransferEngine, IDisposable
     private async Task SpeedLoopAsync(CancellationToken ct)
     {
         var tick = System.Diagnostics.Stopwatch.StartNew();
+        int ticksSinceSave = 0;
         while (!ct.IsCancellationRequested)
         {
             try { await Task.Delay(TimeSpan.FromMilliseconds(500), ct).ConfigureAwait(false); }
@@ -301,6 +370,10 @@ public sealed class TransferManager : ITransferEngine, IDisposable
                     job.LastSampleBytes = now;
                 }
             }
+
+            // Every ~5s rather than every tick — chunk progress a crash loses between
+            // saves isn't worth the extra disk I/O at 2Hz.
+            if (++ticksSinceSave >= 10) { ticksSinceSave = 0; SaveQueue(); }
         }
     }
 
@@ -310,6 +383,7 @@ public sealed class TransferManager : ITransferEngine, IDisposable
         try { _speedLoop.Wait(TimeSpan.FromSeconds(2)); } catch (Exception) { /* best-effort shutdown */ }
         lock (_lock)
             foreach (Job job in _jobs) job.LifecycleCts.Cancel();
+        SaveQueue();
         _concurrency.Dispose();
         _shutdown.Dispose();
     }
